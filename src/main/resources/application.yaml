@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: result-service
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/resultdb
+server:
+  port: 8084
+jwt:
+  secret: am9pbmdpcmxhbmltYWxzaG9lYmxpbmRwbGFudGJlbGxjdXJyZW50YWRkaXRpb253YW4=
