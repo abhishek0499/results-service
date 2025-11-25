@@ -1,13 +1,17 @@
 package com.abhishek.resultService.service;
 
 import com.abhishek.resultService.client.AdminClient;
+import com.abhishek.resultService.client.AuthClient;
 import com.abhishek.resultService.dto.AnswerDTO;
 import com.abhishek.resultService.dto.AttemptDTO;
 import com.abhishek.resultService.dto.QuestionDTO;
 import com.abhishek.resultService.dto.QuestionSnapshotDTO;
+import com.abhishek.resultService.dto.UserDTO;
+import com.abhishek.resultService.dto.event.ResultPublishedEvent;
 import com.abhishek.resultService.exception.QuestionsNotFoundException;
 import com.abhishek.resultService.model.Result;
 import com.abhishek.resultService.repository.ResultRepository;
+import com.abhishek.resultService.service.publisher.NotificationPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +31,8 @@ import static com.abhishek.resultService.constant.Constants.*;
 public class ResultService {
     private final ResultRepository resultRepository;
     private final AdminClient adminClient;
+    private final AuthClient authClient;
+    private final NotificationPublisher notificationPublisher;
 
     @Transactional
     public Result evaluateAttempt(AttemptDTO attempt, String bearerToken) {
@@ -100,6 +106,26 @@ public class ResultService {
         Result savedResult = resultRepository.save(result);
         log.info("Result saved successfully - ID: {}, Score: {}/{}",
                 savedResult.getId(), totalScore, questionIds.size());
+
+        // Publish result notification
+        try {
+            UserDTO candidate = authClient.fetchUser(attempt.getCandidateId(), bearerToken);
+            if (candidate != null) {
+                ResultPublishedEvent event = new ResultPublishedEvent();
+                event.setCandidateId(candidate.getId());
+                event.setCandidateName(candidate.getName());
+                event.setCandidateEmail(candidate.getEmail());
+                event.setTestId(attempt.getTestId());
+                event.setTestName("Assessment"); // TODO: Fetch test name if needed, or pass from attempt
+                event.setScore(totalScore);
+                event.setTotalQuestions(questionIds.size());
+                event.setPercentage(((double) totalScore / questionIds.size()) * 100);
+
+                notificationPublisher.publishResultPublishedEvent(event);
+            }
+        } catch (Exception e) {
+            log.error("Failed to publish result notification", e);
+        }
 
         return savedResult;
     }

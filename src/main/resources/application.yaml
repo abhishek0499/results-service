@@ -4,7 +4,15 @@ spring:
   data:
     mongodb:
       uri: mongodb://localhost:27017/resultdb
+      auto-index-creation: true
+
+  # ActiveMQ Artemis Configuration
+  artemis:
+    mode: native
+    broker-url: tcp://localhost:61616
+    user: admin
+    password: admin
 server:
   port: 8084
 jwt:
-  secret: am9pbmdpcmxhbmltYWxzaG9lYmxpbmRwbGFudGJlbGxjdXJyZW50YWRkaXRpb253YW4=
+  secret: am9pbmdpcmxhbGFuaW1hbHNob2VibGluZHBhbnRiZWxsY3VycmVudGFkZGl0aW9ud2Fu=
