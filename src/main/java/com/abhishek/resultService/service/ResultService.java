@@ -116,7 +116,7 @@ public class ResultService {
                 event.setCandidateName(candidate.getName());
                 event.setCandidateEmail(candidate.getEmail());
                 event.setTestId(attempt.getTestId());
-                event.setTestName("Assessment"); // TODO: Fetch test name if needed, or pass from attempt
+                event.setTestName("Assessment"); // For now kept it static as it'll use an api call just to get Test Name
                 event.setScore(totalScore);
                 event.setTotalQuestions(questionIds.size());
                 event.setPercentage(((double) totalScore / questionIds.size()) * 100);
