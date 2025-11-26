@@ -1,15 +1,21 @@
 package com.abhishek.resultService.service;
 
 import com.abhishek.resultService.client.AdminClient;
+import com.abhishek.resultService.client.AuthClient;
 import com.abhishek.resultService.dto.AnswerDTO;
 import com.abhishek.resultService.dto.AttemptDTO;
 import com.abhishek.resultService.dto.QuestionDTO;
 import com.abhishek.resultService.dto.QuestionSnapshotDTO;
+import com.abhishek.resultService.dto.UserDTO;
+import com.abhishek.resultService.dto.event.ResultPublishedEvent;
+import com.abhishek.resultService.exception.QuestionsNotFoundException;
 import com.abhishek.resultService.model.Result;
 import com.abhishek.resultService.repository.ResultRepository;
+import com.abhishek.resultService.service.publisher.NotificationPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -17,34 +23,37 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.abhishek.resultService.constant.Constants.*;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ResultService {
     private final ResultRepository resultRepository;
     private final AdminClient adminClient;
+    private final AuthClient authClient;
+    private final NotificationPublisher notificationPublisher;
 
+    @Transactional
     public Result evaluateAttempt(AttemptDTO attempt, String bearerToken) {
-        log.info("Evaluating attempt: {} for candidate: {}, test: {}",
+        log.info("Evaluating attempt: {}, Candidate: {}, Test: {}",
                 attempt.getId(), attempt.getCandidateId(), attempt.getTestId());
 
         if (attempt.getQuestions() == null || attempt.getQuestions().isEmpty()) {
             log.warn("No questions found in attempt: {}", attempt.getId());
-            return null;
+            throw new IllegalArgumentException("Attempt has no questions to evaluate");
         }
 
         List<String> questionIds = attempt.getQuestions().stream()
                 .map(QuestionSnapshotDTO::getQuestionId)
                 .collect(Collectors.toList());
 
-        log.debug("Fetching {} questions from admin service for attempt: {}",
-                questionIds.size(), attempt.getId());
+        log.debug("Fetching {} questions from admin service", questionIds.size());
 
         List<QuestionDTO> questions = adminClient.fetchQuestionsBulk(questionIds, bearerToken);
         if (questions.isEmpty()) {
-            log.error("Failed to fetch questions for attempt: {}, questionIds: {}",
-                    attempt.getId(), questionIds);
-            return null;
+            log.error("Failed to fetch questions - IDs: {}", questionIds);
+            throw new QuestionsNotFoundException(questionIds);
         }
 
         log.debug("Successfully fetched {} questions for evaluation", questions.size());
@@ -58,8 +67,7 @@ public class ResultService {
 
         // Map candidate answers for easy lookup
         if (attempt.getAnswers() != null) {
-            log.debug("Processing {} candidate answers for attempt: {}",
-                    attempt.getAnswers().size(), attempt.getId());
+            log.debug("Processing {} candidate answers", attempt.getAnswers().size());
 
             for (AnswerDTO answer : attempt.getAnswers()) {
                 candidateAnswersMap.put(answer.getQuestionId(), answer.getOptionId());
@@ -74,18 +82,16 @@ public class ResultService {
             String candidateOptionId = candidateAnswersMap.get(questionId);
 
             if (correctOptionId != null && correctOptionId.equals(candidateOptionId)) {
-                totalScore++; // Assume 1 mark per question
+                totalScore++; // For now assuming 1 mark per question
                 correctAnswersCount++;
-                log.debug("Question {} answered correctly by candidate: {}",
-                        questionId, attempt.getCandidateId());
+                log.debug("Question {} answered correctly", questionId);
             } else {
-                log.debug("Question {} answered incorrectly. Correct: {}, Candidate: {}",
+                log.debug("Question {} answered incorrectly - Correct: {}, Candidate: {}",
                         questionId, correctOptionId, candidateOptionId);
             }
         }
 
-        log.info("Evaluation complete for attempt: {}. Score: {}/{}",
-                attempt.getId(), totalScore, questionIds.size());
+        log.info("Evaluation complete - Score: {}/{}", totalScore, questionIds.size());
 
         Result result = new Result();
         result.setAttemptId(attempt.getId());
@@ -98,8 +104,28 @@ public class ResultService {
         result.setEvaluatedAt(LocalDateTime.now());
 
         Result savedResult = resultRepository.save(result);
-        log.info("Result saved successfully: {} for attempt: {}, candidate: {}",
-                savedResult.getId(), attempt.getId(), attempt.getCandidateId());
+        log.info("Result saved successfully - ID: {}, Score: {}/{}",
+                savedResult.getId(), totalScore, questionIds.size());
+
+        // Publish result notification
+        try {
+            UserDTO candidate = authClient.fetchUser(attempt.getCandidateId(), bearerToken);
+            if (candidate != null) {
+                ResultPublishedEvent event = new ResultPublishedEvent();
+                event.setCandidateId(candidate.getId());
+                event.setCandidateName(candidate.getName());
+                event.setCandidateEmail(candidate.getEmail());
+                event.setTestId(attempt.getTestId());
+                event.setTestName("Assessment"); // For now kept it static as it'll use an api call just to get Test Name
+                event.setScore(totalScore);
+                event.setTotalQuestions(questionIds.size());
+                event.setPercentage(((double) totalScore / questionIds.size()) * 100);
+
+                notificationPublisher.publishResultPublishedEvent(event);
+            }
+        } catch (Exception e) {
+            log.error("Failed to publish result notification", e);
+        }
 
         return savedResult;
     }
@@ -108,7 +134,7 @@ public class ResultService {
         log.info("Fetching result history for candidate: {}", candidateId);
 
         List<Result> results = resultRepository.findByCandidateId(candidateId);
-        log.debug("Found {} results for candidate: {}", results.size(), candidateId);
+        log.debug("Found {} results", results.size());
 
         return results;
     }
@@ -117,7 +143,7 @@ public class ResultService {
         log.info("Fetching results for test: {}", testId);
 
         List<Result> results = resultRepository.findByTestId(testId);
-        log.debug("Found {} results for test: {}", results.size(), testId);
+        log.debug("Found {} results", results.size());
 
         return results;
     }
@@ -126,7 +152,7 @@ public class ResultService {
         log.info("Exporting results as CSV for test: {}", testId);
 
         List<Result> results = resultRepository.findByTestId(testId);
-        StringBuilder csvContent = new StringBuilder("CandidateID,Score,CorrectAnswers,TotalQuestions,EvaluatedAt\n");
+        StringBuilder csvContent = new StringBuilder(CSV_HEADER);
 
         for (Result result : results) {
             csvContent.append(result.getCandidateId()).append(",")
@@ -136,7 +162,7 @@ public class ResultService {
                     .append(result.getEvaluatedAt()).append("\n");
         }
 
-        log.info("Exported {} results for test: {}", results.size(), testId);
+        log.info("Exported {} results", results.size());
         return csvContent.toString();
     }
 }
