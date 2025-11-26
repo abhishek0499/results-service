@@ -82,7 +82,7 @@ public class ResultService {
             String candidateOptionId = candidateAnswersMap.get(questionId);
 
             if (correctOptionId != null && correctOptionId.equals(candidateOptionId)) {
-                totalScore++; // Assume 1 mark per question
+                totalScore++; // For now assuming 1 mark per question
                 correctAnswersCount++;
                 log.debug("Question {} answered correctly", questionId);
             } else {

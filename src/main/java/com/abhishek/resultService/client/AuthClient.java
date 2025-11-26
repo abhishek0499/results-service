@@ -44,10 +44,21 @@ public class AuthClient {
     }
 
     public UserDTO fetchUser(String userId, String bearerToken) {
-        // For now using bulk fetch as individual fetch endpoint might not exist or be
-        // efficient
-        // Ideally should have GET /users/{id}
-        Map<String, UserDTO> users = fetchUsersMap(bearerToken);
-        return users.get(userId);
+        log.debug("Fetching user with userID {} from auth-service", userId);
+        try {
+            ApiResponse<UserDTO> response = restClient.get()
+                    .uri(authServiceUrl + "/user/{userId}", userId)
+                    .header("Authorization", "Bearer " + bearerToken)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<>() {
+                    });
+
+            if (response != null && response.getData() != null) {
+                return response.getData();
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch user {} from auth-service", userId, e);
+        }
+        return null;
     }
 }
