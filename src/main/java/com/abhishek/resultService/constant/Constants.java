@@ -24,7 +24,7 @@ public final class Constants {
     public static final String ENDPOINT_TEST = "/test";
     public static final String ENDPOINT_EXPORT = "/export";
 
-    public static final String CSV_HEADER = "CandidateID,Score,CorrectAnswers,TotalQuestions,EvaluatedAt\n";
+    public static final String CSV_HEADER = "CandidateID,CandidateName,Score,CorrectAnswers,TotalQuestions,EvaluatedAt\n";
     public static final String CSV_FILENAME_PREFIX = "results_";
     public static final String CSV_FILENAME_SUFFIX = ".csv";
 }

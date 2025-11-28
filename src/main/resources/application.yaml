@@ -15,4 +15,4 @@ spring:
 server:
   port: 8084
 jwt:
-  secret: am9pbmdpcmxhbGFuaW1hbHNob2VibGluZHBhbnRiZWxsY3VycmVudGFkZGl0aW9ud2Fu=
+  secret: am9pbmdpcmxhbmltYWxzaG9lYmxpbmRwbGFudGJlbGxjdXJyZW50YWRkaXRpb253YW4=

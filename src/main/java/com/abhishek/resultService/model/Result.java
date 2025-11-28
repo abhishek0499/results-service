@@ -15,6 +15,7 @@ public class Result {
     private String id;
     private String attemptId;
     private String candidateId;
+    private String candidateName;
     private String testId;
     private int score;
     private int correctCount;

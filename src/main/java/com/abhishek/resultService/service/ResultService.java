@@ -103,20 +103,20 @@ public class ResultService {
         result.setDetailedAnswers(candidateAnswersMap);
         result.setEvaluatedAt(LocalDateTime.now());
 
-        Result savedResult = resultRepository.save(result);
-        log.info("Result saved successfully - ID: {}, Score: {}/{}",
-                savedResult.getId(), totalScore, questionIds.size());
-
-        // Publish result notification
+        // Fetch candidate details
         try {
             UserDTO candidate = authClient.fetchUser(attempt.getCandidateId(), bearerToken);
             if (candidate != null) {
+                result.setCandidateName(candidate.getName());
+
+                // Publish result notification
                 ResultPublishedEvent event = new ResultPublishedEvent();
                 event.setCandidateId(candidate.getId());
                 event.setCandidateName(candidate.getName());
                 event.setCandidateEmail(candidate.getEmail());
                 event.setTestId(attempt.getTestId());
-                event.setTestName("Assessment"); // For now kept it static as it'll use an api call just to get Test Name
+                event.setTestName("Assessment"); // For now kept it static as it'll use an api call just to get Test
+                                                 // Name
                 event.setScore(totalScore);
                 event.setTotalQuestions(questionIds.size());
                 event.setPercentage(((double) totalScore / questionIds.size()) * 100);
@@ -124,8 +124,12 @@ public class ResultService {
                 notificationPublisher.publishResultPublishedEvent(event);
             }
         } catch (Exception e) {
-            log.error("Failed to publish result notification", e);
+            log.error("Failed to fetch candidate details or publish notification", e);
         }
+
+        Result savedResult = resultRepository.save(result);
+        log.info("Result saved successfully - ID: {}, Score: {}/{}",
+                savedResult.getId(), totalScore, questionIds.size());
 
         return savedResult;
     }
@@ -156,6 +160,7 @@ public class ResultService {
 
         for (Result result : results) {
             csvContent.append(result.getCandidateId()).append(",")
+                    .append(result.getCandidateName() != null ? result.getCandidateName() : "N/A").append(",")
                     .append(result.getScore()).append(",")
                     .append(result.getCorrectCount()).append(",")
                     .append(result.getTotalQuestions()).append(",")
